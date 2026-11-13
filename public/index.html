@@ -9,5 +9,17 @@
     <h1>Claude FM Radio</h1>
     <p>Stream: <a href="/stream">/stream</a></p>
     <p>Playlist: <a href="/radio.m3u">/radio.m3u</a></p>
+    <audio controls src="/stream" autoplay></audio>
+    <p id="status"></p>
+    <script>
+      const audio = document.querySelector('audio');
+      const status = document.getElementById('status');
+      function retry() {
+        status.textContent = 'Stream unavailable, retrying...';
+        setTimeout(() => { audio.src = '/stream?refresh=1&t=' + Date.now(); audio.load(); audio.play().catch(()=>{}); }, 5000);
+      }
+      audio.addEventListener('error', retry);
+      audio.addEventListener('playing', () => { status.textContent = ''; });
+    </script>
   </body>
 </html>
