@@ -31,3 +31,12 @@ residential/rotating proxy to make outbound requests (resolution + byte proxying
 - `PROXY_URL` (alias)
 
 Use a sticky session so resolution and byte fetching share one IP.
+
+## Current status
+
+- Direct YouTube resolution from Netlify's datacenter IPs is blocked by YouTube
+  ("Sign in to confirm you're not a bot"), so `/stream` returns 503 unless a proxy
+  is configured.
+- Configure `HTTP_PROXY`/`HTTPS_PROXY`/`PROXY_URL` (residential, sticky session) or
+  `FALLBACK_AUDIO_URL` to restore service.
+- Third-party Piped/Invidious providers are currently unreliable/dead.
