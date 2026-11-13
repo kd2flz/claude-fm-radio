@@ -1,7 +1,7 @@
 const VIDEO_ID = Deno.env.get("YOUTUBE_VIDEO_ID") || "tRsQsTMvPNg";
 const ITAG = Deno.env.get("AUDIO_ITAG") || "140";
 const PIPED = (Deno.env.get("PIPED_INSTANCES") || "https://pipedapi.kavin.rocks").split(",").map((s) => s.trim()).filter(Boolean);
-const INVIDIOUS = (Deno.env.get("INVIDIOUS_INSTANCES") || "").split(",").map((s) => s.trim()).filter(Boolean);
+const INVIDIOUS = (Deno.env.get("INVIDIOUS_INSTANCES") || "https://inv.nadeko.net").split(",").map((s) => s.trim()).filter(Boolean);
 const FALLBACK = Deno.env.get("FALLBACK_AUDIO_URL");
 const TTL = 2 * 60 * 1000;
 
