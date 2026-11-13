@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# protect main: no direct commits
+if [ -n "${GIT_INDEX_FILE:-}" ]; then
+  branch=$(git symbolic-ref --quiet --short HEAD || true)
+  if [ "$branch" = "main" ]; then
+    echo "main is PR-only. Branch first." >&2
+    exit 1
+  fi
+fi
+exit 0

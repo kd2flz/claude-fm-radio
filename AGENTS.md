@@ -19,6 +19,13 @@ for radio-browser.info. No build/test toolchain; deploy via Netlify.
 - Netlify edge execution has ~50s limits; clients auto-reconnect.
 - Portability: all config via env vars; no Netlify-specific storage used.
 
+## Developer workflow
+
+Follows dev-workflow-spec (../dev-workflow-spec/WORKFLOW.md); Nix level: Optional.
+Deviations: GitHub (not Azure DevOps); no devenv; hooks in `.githooks/`.
+Enable hooks: `./scripts/setup.sh`. Verify: `./scripts/check.sh`.
+Worktrees are siblings under `../claude-fm-radio-wt/`.
+
 ## Deploy
 
 Connect repo to Netlify; set env vars in dashboard; deploy. Stream URL: `/stream`.
