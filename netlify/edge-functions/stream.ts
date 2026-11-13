@@ -130,17 +130,54 @@ async function resolve(force = false): Promise<string> {
   throw new Error("no audio source");
 }
 
+
+async function diagnose() {
+  const out = {};
+  let apiKey = null;
+  try {
+    const res = await fetch(`https://www.youtube.com/watch?v=${VIDEO_ID}`, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(8000),
+    });
+    out.watchStatus = res.status;
+    const html = await res.text();
+    const m = html.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/);
+    apiKey = m?.[1] || null;
+    out.apiKeyFound = !!apiKey;
+    out.watchLength = html.length;
+  } catch (e) {
+    out.watchError = String(e);
+  }
+  out.innerTube = [];
+  if (apiKey) {
+    for (const profile of PROFILES) {
+      const u = await tryInnerTube(profile, apiKey);
+      out.innerTube.push({ name: profile.name, ok: !!u });
+    }
+  } else {
+    out.innerTubeSkipped = true;
+  }
+  out.piped = [];
+  for (const i of PIPED) {
+    const u = await tryPiped(i);
+    out.piped.push({ instance: i, ok: !!u });
+  }
+  out.invidious = [];
+  for (const i of INVIDIOUS) {
+    const u = await tryInvidious(i);
+    out.invidious.push({ instance: i, ok: !!u });
+  }
+  out.fallbackSet = !!FALLBACK;
+  return out;
+}
+
 export default async (request: Request) => {
   const params = new URL(request.url).searchParams;
   const force = params.get("refresh") === "1";
   const debug = params.get("debug") === "1";
   if (debug) {
-    try {
-      const u = await resolve(force);
-      return new Response(JSON.stringify({ ok: true, url: u }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
-    } catch (e) {
-      return new Response(JSON.stringify({ ok: false, error: String(e), lastGood }), { status: 503, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
-    }
+    const d = await diagnose();
+    return new Response(JSON.stringify(d), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
   }
   let audioUrl: string;
   try {
