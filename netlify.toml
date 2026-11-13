@@ -1,0 +1,10 @@
+[build]
+  publish = "public"
+
+[[edge_functions]]
+  path = "/stream"
+  function = "stream"
+
+[[edge_functions]]
+  path = "/health"
+  function = "health"
