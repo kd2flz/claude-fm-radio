@@ -131,7 +131,17 @@ async function resolve(force = false): Promise<string> {
 }
 
 export default async (request: Request) => {
-  const force = new URL(request.url).searchParams.get("refresh") === "1";
+  const params = new URL(request.url).searchParams;
+  const force = params.get("refresh") === "1";
+  const debug = params.get("debug") === "1";
+  if (debug) {
+    try {
+      const u = await resolve(force);
+      return new Response(JSON.stringify({ ok: true, url: u }), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+    } catch (e) {
+      return new Response(JSON.stringify({ ok: false, error: String(e), lastGood }), { status: 503, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+    }
+  }
   let audioUrl: string;
   try {
     audioUrl = await resolve(force);
