@@ -4,8 +4,6 @@ const PIPED = (Deno.env.get("PIPED_INSTANCES") || "https://pipedapi.kavin.rocks"
 const INVIDIOUS = (Deno.env.get("INVIDIOUS_INSTANCES") || "https://inv.nadeko.net").split(",").map((s) => s.trim()).filter(Boolean);
 const FALLBACK = Deno.env.get("FALLBACK_AUDIO_URL");
 const TTL = 2 * 60 * 1000;
-const INNER_TUBE_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
-
 const PROFILES = [
   {
     name: "ANDROID",
@@ -28,7 +26,8 @@ const PROFILES = [
 let cache: { url: string; at: number } | null = null;
 let lastGood: string | null = null;
 
-async function tryInnerTube(profile: typeof PROFILES[number], apiKey: string): Promise<string | null> {
+async function tryInnerTube(profile: typeof PROFILES[number], apiKey: string | null): Promise<string | null> {
+  if (!apiKey) return null;
   try {
     const res = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}&prettyPrint=false`, {
       method: "POST",
@@ -68,18 +67,18 @@ async function tryInnerTube(profile: typeof PROFILES[number], apiKey: string): P
   }
 }
 
-async function fetchApiKeyFromWatchPage(): Promise<string> {
+async function fetchApiKeyFromWatchPage(): Promise<string | null> {
   try {
     const res = await fetch(`https://www.youtube.com/watch?v=${VIDEO_ID}`, {
       headers: { "User-Agent": "Mozilla/5.0" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return INNER_TUBE_KEY;
+    if (!res.ok) return null;
     const html = await res.text();
     const m = html.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/);
-    return m?.[1] || INNER_TUBE_KEY;
+    return m?.[1] || null;
   } catch {
-    return INNER_TUBE_KEY;
+    return null;
   }
 }
 
@@ -110,15 +109,12 @@ async function tryInvidious(instance: string): Promise<string | null> {
 async function resolve(force = false): Promise<string> {
   if (!force && cache && Date.now() - cache.at < TTL) return cache.url;
 
-  let apiKey = INNER_TUBE_KEY;
-  for (const profile of PROFILES) {
-    const u = await tryInnerTube(profile, apiKey);
-    if (u) { cache = { url: u, at: Date.now() }; lastGood = u; return u; }
-  }
-  apiKey = await fetchApiKeyFromWatchPage();
-  for (const profile of PROFILES) {
-    const u = await tryInnerTube(profile, apiKey);
-    if (u) { cache = { url: u, at: Date.now() }; lastGood = u; return u; }
+  const apiKey = await fetchApiKeyFromWatchPage();
+  if (apiKey) {
+    for (const profile of PROFILES) {
+      const u = await tryInnerTube(profile, apiKey);
+      if (u) { cache = { url: u, at: Date.now() }; lastGood = u; return u; }
+    }
   }
 
   for (const i of PIPED) {
