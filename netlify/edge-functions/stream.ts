@@ -1,8 +1,15 @@
 const VIDEO_ID = Deno.env.get("YOUTUBE_VIDEO_ID") || "tRsQsTMvPNg";
 const PREFERRED_ITAG = Deno.env.get("AUDIO_ITAG") || "140";
-const PIPED = (Deno.env.get("PIPED_INSTANCES") || "https://pipedapi.kavin.rocks").split(",").map((s) => s.trim()).filter(Boolean);
-const INVIDIOUS = (Deno.env.get("INVIDIOUS_INSTANCES") || "https://inv.nadeko.net").split(",").map((s) => s.trim()).filter(Boolean);
+const PIPED = (Deno.env.get("PIPED_INSTANCES") || "https://pipedapi.kavin.rocks,https://pipedapi.adminforge.de,https://pipedapi.owo.si").split(",").map((s) => s.trim()).filter(Boolean);
+const INVIDIOUS = (Deno.env.get("INVIDIOUS_INSTANCES") || "https://inv.nadeko.net,https://invidious.tiekoetter.com").split(",").map((s) => s.trim()).filter(Boolean);
 const FALLBACK = Deno.env.get("FALLBACK_AUDIO_URL");
+const PROXY = Deno.env.get("HTTP_PROXY") || Deno.env.get("HTTPS_PROXY") || Deno.env.get("PROXY_URL");
+let _httpClient: any = null;
+if (PROXY) { try { _httpClient = Deno.createHttpClient({ proxy: { url: PROXY } }); } catch {} }
+function pfetch(url: string, init?: any) {
+  if (_httpClient) return fetch(url, { ...(init || {}), client: _httpClient });
+  return fetch(url, init);
+}
 const TTL = 2 * 60 * 1000;
 const PROFILES = [
   {
@@ -29,7 +36,7 @@ let lastGood: string | null = null;
 async function tryInnerTube(profile: typeof PROFILES[number], apiKey: string | null): Promise<string | null> {
   if (!apiKey) return null;
   try {
-    const res = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}&prettyPrint=false`, {
+    const res = await pfetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}&prettyPrint=false`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -69,7 +76,7 @@ async function tryInnerTube(profile: typeof PROFILES[number], apiKey: string | n
 
 async function fetchApiKeyFromWatchPage(): Promise<string | null> {
   try {
-    const res = await fetch(`https://www.youtube.com/watch?v=${VIDEO_ID}`, {
+    const res = await pfetch(`https://www.youtube.com/watch?v=${VIDEO_ID}`, {
       headers: { "User-Agent": "Mozilla/5.0" },
       signal: AbortSignal.timeout(8000),
     });
@@ -84,7 +91,7 @@ async function fetchApiKeyFromWatchPage(): Promise<string | null> {
 
 async function tryPiped(instance: string): Promise<string | null> {
   try {
-    const res = await fetch(`${instance}/streams/${VIDEO_ID}`, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
+    const res = await pfetch(`${instance}/streams/${VIDEO_ID}`, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     const data = await res.json();
     const streams = data.audioStreams || [];
@@ -98,7 +105,7 @@ async function tryPiped(instance: string): Promise<string | null> {
 async function tryInvidious(instance: string): Promise<string | null> {
   try {
     const url = `${instance}/latest_version?id=${VIDEO_ID}&itag=${PREFERRED_ITAG}&local=true`;
-    const res = await fetch(url, { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
+    const res = await pfetch(url, { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     return res.url || url;
   } catch {
@@ -131,84 +138,8 @@ async function resolve(force = false): Promise<string> {
 }
 
 
-async function diagnose() {
-  const out = {};
-  let apiKey = null;
-  try {
-    const res = await fetch(`https://www.youtube.com/watch?v=${VIDEO_ID}`, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(8000),
-    });
-    out.watchStatus = res.status;
-    const html = await res.text();
-    const m = html.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/);
-    apiKey = m?.[1] || null;
-    out.apiKeyFound = !!apiKey;
-    out.watchLength = html.length;
-  } catch (e) {
-    out.watchError = String(e);
-  }
-  out.innerTube = [];
-  if (apiKey) {
-    for (const profile of PROFILES) {
-      try {
-        const res = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}&prettyPrint=false`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "User-Agent": profile.userAgent,
-            "X-YouTube-Client-Name": profile.clientHeader,
-            "X-YouTube-Client-Version": profile.clientVersion,
-            "Accept-Language": "en-US,en;q=0.9",
-          },
-          body: JSON.stringify({
-            context: { client: { clientName: profile.clientName, clientVersion: profile.clientVersion, hl: "en", gl: "US", ...profile.extra } },
-            videoId: VIDEO_ID,
-            contentCheckOk: true,
-            racyCheckOk: true,
-          }),
-          signal: AbortSignal.timeout(8000),
-        });
-        const data = await res.json();
-        const fmts = data?.streamingData?.adaptiveFormats || data?.streamingData?.formats || [];
-        const audio = fmts.filter((f) => String(f?.mimeType || "").toLowerCase().startsWith("audio/"));
-        out.innerTube.push({
-          name: profile.name,
-          http: res.status,
-          playability: data?.playabilityStatus?.status,
-          reason: data?.playabilityStatus?.reason,
-          formatCount: fmts.length,
-          audioCount: audio.length,
-        });
-      } catch (e) {
-        out.innerTube.push({ name: profile.name, error: String(e) });
-      }
-    }
-  } else {
-    out.innerTubeSkipped = true;
-  }
-  out.piped = [];
-  for (const i of PIPED) {
-    const u = await tryPiped(i);
-    out.piped.push({ instance: i, ok: !!u });
-  }
-  out.invidious = [];
-  for (const i of INVIDIOUS) {
-    const u = await tryInvidious(i);
-    out.invidious.push({ instance: i, ok: !!u });
-  }
-  out.fallbackSet = !!FALLBACK;
-  return out;
-}
-
 export default async (request: Request) => {
-  const params = new URL(request.url).searchParams;
-  const force = params.get("refresh") === "1";
-  const debug = params.get("debug") === "1";
-  if (debug) {
-    const d = await diagnose();
-    return new Response(JSON.stringify(d), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
-  }
+  const force = new URL(request.url).searchParams.get("refresh") === "1";
   let audioUrl: string;
   try {
     audioUrl = await resolve(force);
@@ -221,14 +152,14 @@ export default async (request: Request) => {
   if (range) headers["Range"] = range;
   let upstream: Response | null = null;
   try {
-    upstream = await fetch(audioUrl, { headers });
+    upstream = await pfetch(audioUrl, { headers });
   } catch {
     try {
       audioUrl = await resolve(true);
-      upstream = await fetch(audioUrl, { headers });
+      upstream = await pfetch(audioUrl, { headers });
     } catch {
       if (lastGood && lastGood !== audioUrl) {
-        try { upstream = await fetch(lastGood, { headers }); if (upstream.ok) audioUrl = lastGood; } catch {}
+        try { upstream = await pfetch(lastGood, { headers }); if (upstream.ok) audioUrl = lastGood; } catch {}
       }
     }
   }
@@ -236,11 +167,11 @@ export default async (request: Request) => {
   if (!upstream.ok) {
     try {
       audioUrl = await resolve(true);
-      upstream = await fetch(audioUrl, { headers });
+      upstream = await pfetch(audioUrl, { headers });
     } catch {}
   }
   if (!upstream.ok && lastGood && lastGood !== audioUrl) {
-    try { const r = await fetch(lastGood, { headers }); if (r.ok) { upstream = r; audioUrl = lastGood; } } catch {}
+    try { const r = await pfetch(lastGood, { headers }); if (r.ok) { upstream = r; audioUrl = lastGood; } } catch {}
   }
   if (!upstream.ok) return new Response("stream unavailable", { status: 503 });
   const respHeaders = new Headers();
