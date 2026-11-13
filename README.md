@@ -21,3 +21,13 @@ URL is kept as a last resort so the stream degrades gracefully instead of return
 ## radio-browser.info
 
 Register `https://<site>/stream` as the station stream URL. `/health` reports liveness.
+
+## Proxy (optional)
+
+Netlify's datacenter IPs are often blocked by YouTube. Set one of these env vars to a
+residential/rotating proxy to make outbound requests (resolution + byte proxying) use it:
+
+- `HTTP_PROXY` / `HTTPS_PROXY` (standard, e.g. `http://user:pass@host:port`)
+- `PROXY_URL` (alias)
+
+Use a sticky session so resolution and byte fetching share one IP.
