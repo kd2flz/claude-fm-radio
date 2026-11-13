@@ -151,8 +151,38 @@ async function diagnose() {
   out.innerTube = [];
   if (apiKey) {
     for (const profile of PROFILES) {
-      const u = await tryInnerTube(profile, apiKey);
-      out.innerTube.push({ name: profile.name, ok: !!u });
+      try {
+        const res = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}&prettyPrint=false`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": profile.userAgent,
+            "X-YouTube-Client-Name": profile.clientHeader,
+            "X-YouTube-Client-Version": profile.clientVersion,
+            "Accept-Language": "en-US,en;q=0.9",
+          },
+          body: JSON.stringify({
+            context: { client: { clientName: profile.clientName, clientVersion: profile.clientVersion, hl: "en", gl: "US", ...profile.extra } },
+            videoId: VIDEO_ID,
+            contentCheckOk: true,
+            racyCheckOk: true,
+          }),
+          signal: AbortSignal.timeout(8000),
+        });
+        const data = await res.json();
+        const fmts = data?.streamingData?.adaptiveFormats || data?.streamingData?.formats || [];
+        const audio = fmts.filter((f) => String(f?.mimeType || "").toLowerCase().startsWith("audio/"));
+        out.innerTube.push({
+          name: profile.name,
+          http: res.status,
+          playability: data?.playabilityStatus?.status,
+          reason: data?.playabilityStatus?.reason,
+          formatCount: fmts.length,
+          audioCount: audio.length,
+        });
+      } catch (e) {
+        out.innerTube.push({ name: profile.name, error: String(e) });
+      }
     }
   } else {
     out.innerTubeSkipped = true;
