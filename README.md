@@ -11,6 +11,13 @@ audio URL ingestible by radio-browser.info.
    `AUDIO_ITAG`, `FALLBACK_AUDIO_URL`.
 4. Deploy. Stream URL: `https://<site>/stream` (or `/radio.m3u`).
 
+## Resilience
+
+Resolution order: YouTube InnerTube (ANDROID, then IOS) -> Piped instances ->
+Invidious instances -> `FALLBACK_AUDIO_URL` -> last known good URL. A stale-but-working
+URL is kept as a last resort so the stream degrades gracefully instead of returning
+503. `?refresh=1` bypasses the 2-minute cache.
+
 ## radio-browser.info
 
 Register `https://<site>/stream` as the station stream URL. `/health` reports liveness.
