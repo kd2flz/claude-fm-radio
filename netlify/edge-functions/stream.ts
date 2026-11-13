@@ -176,5 +176,3 @@ export default async (request: Request) => {
   if (ar) respHeaders.set("Accept-Ranges", ar);
   return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
 };
-EOF
-echo done
